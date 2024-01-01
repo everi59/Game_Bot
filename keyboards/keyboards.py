@@ -4,6 +4,7 @@ from typing import Any
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from lexicon.lexicon import keyboard_lexicon
 
 
 def keyboard_builder(buttons: list,

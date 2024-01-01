@@ -3,3 +3,4 @@ lexicon_commands: dict[str, str] = {
     '/lobbies': 'Все лобби'
 }
 
+keyboard_lexicon = {}
