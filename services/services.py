@@ -14,11 +14,15 @@ class FSMLobbyClass(StatesGroup):
 
 
 def create_lobbies_page():
-    return {LobbyCallbackFactory(lobby_id=i).pack(): f'Лобби №{i} {len(lobby_database.get_lobby_stat(i))}/4' for i in range(1, 5)}
+    return {LobbyCallbackFactory(lobby_id=i).pack(): f'Лобби №{i} {len(lobby_database.get_lobby_stat(i))}/4'
+            for i in range(1, 5)}
 
 
 async def send_messages_to_users(bot: Bot, message: str, users: list):
     for i in users:
-        await bot.send_message(chat_id=int(i), text=message)
+        await bot.send_message(chat_id=int(i.split('-')[0]), text=message)
 
 
+def get_lobby_members(pairs: list):
+    members = list(map(lambda x: x.split('-')[1], pairs))
+    return '\n'.join(members)

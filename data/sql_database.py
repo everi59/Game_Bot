@@ -10,53 +10,53 @@ class LobbyDatabase:
     def create_table(self):
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
-           (lobby_id INT PRIMARY KEY,
-           people TEXT);""")
+            (lobby_id INT PRIMARY KEY,
+            users TEXT);
+            """)
         conn.commit()
         cur.close()
         print('[INFO] TABLE CREATED SUCCESSFULLY')
 
     def default_lobby(self, lobby_id: int):
         cur = conn.cursor()
-        cur.execute(f"""INSERT OR IGNORE INTO {self.name} (lobby_id, people)
+        cur.execute(f"""INSERT OR IGNORE INTO {self.name} (lobby_id, users)
         VALUES ({lobby_id}, '');
         """)
         conn.commit()
         cur.close()
 
-    def enter_lobby(self, lobby_id: int, user_chat_id: str):
+    def enter_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
         cur = conn.cursor()
-        cur.execute(f"""SELECT people FROM {self.name}
+        cur.execute(f"""SELECT users FROM {self.name}
                         WHERE lobby_id={lobby_id};
                         """)
-        s = cur.fetchone()[0].split()
-        s.append(user_chat_id)
-        cur.execute(f"""UPDATE {self.name} SET people='{' '.join(s)}' WHERE lobby_id={lobby_id};""")
+        pairs = cur.fetchone()[0].split()
+        pairs.append(f"""{user_chat_id}-{user_name}""")
+        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE lobby_id={lobby_id};""")
         conn.commit()
         cur.close()
 
-    def exit_lobby(self, lobby_id: int, user_chat_id: str):
+    def exit_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
         cur = conn.cursor()
-        cur.execute(f"""SELECT people FROM {self.name}
+        cur.execute(f"""SELECT users FROM {self.name}
                                 WHERE lobby_id={lobby_id};
                                 """)
-        s = cur.fetchone()[0].split()
-        s.remove(user_chat_id)
-        cur.execute(f"""UPDATE {self.name} SET people='{' '.join(s)}' WHERE lobby_id={lobby_id};""")
+        pairs = cur.fetchone()[0].split()
+        pairs.remove(f"""{user_chat_id}-{user_name}""")
+        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE lobby_id={lobby_id};""")
         conn.commit()
         cur.close()
 
     def reset_lobby(self, lobby_id: int):
         cur = conn.cursor()
-        cur.execute(f"""UPDATE {self.name} SET people='' WHERE lobby_id={lobby_id};""")
+        cur.execute(f"""UPDATE {self.name} SET users='' WHERE lobby_id={lobby_id};""")
         conn.commit()
         cur.close()
 
     def get_lobby_stat(self, lobby_id: int):
         cur = conn.cursor()
-        cur.execute(f"""SELECT people FROM {self.name}
-                                        WHERE lobby_id={lobby_id};
-                                        """)
+        cur.execute(f"""SELECT users FROM {self.name}
+                    WHERE lobby_id={lobby_id};""")
         s = cur.fetchone()[0].split()
         conn.commit()
         cur.close()
@@ -70,8 +70,8 @@ class UsersWithoutLobbiesDatabase:
     def create_table(self):
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
-           (chat_id INT PRIMARY KEY,
-           message_id INT);""")
+            (chat_id INT PRIMARY KEY,
+            message_id INT);""")
         conn.commit()
         cur.close()
         print('[INFO] TABLE CREATED SUCCESSFULLY')
@@ -101,3 +101,5 @@ class UsersWithoutLobbiesDatabase:
     def delete_chat_id(self, chat_id):
         cur = conn.cursor()
         cur.execute(f"""DELETE FROM {self.name} WHERE chat_id={chat_id};""")
+        conn.commit()
+        cur.close()
