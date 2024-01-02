@@ -16,11 +16,11 @@ bot = Bot(token=config.tg_bot.token,
 
 
 async def main():
-    lobby_database.create_table()
-    users_without_lobbies_database.create_table()
+    await lobby_database.create_table()
+    await users_without_lobbies_database.create_table()
     for i in range(-1, 5):
-        lobby_database.reset_lobby(i)
-        lobby_database.default_lobby(i)
+        await lobby_database.reset_lobby(i)
+        await lobby_database.default_lobby(i)
     logging.basicConfig(level=logging.INFO,
                         format='%(filename)s:%(lineno)d #%(levelname)-8s '
                                '[%(asctime)s] - %(name)s - %(message)s')

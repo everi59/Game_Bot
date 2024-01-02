@@ -7,7 +7,7 @@ class LobbyDatabase:
     def __init__(self, name):
         self.name = name
 
-    def create_table(self):
+    async def create_table(self):
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
             (lobby_id INT PRIMARY KEY,
@@ -17,7 +17,7 @@ class LobbyDatabase:
         cur.close()
         print('[INFO] TABLE CREATED SUCCESSFULLY')
 
-    def default_lobby(self, lobby_id: int):
+    async def default_lobby(self, lobby_id: int):
         cur = conn.cursor()
         cur.execute(f"""INSERT OR IGNORE INTO {self.name} (lobby_id, users)
         VALUES ({lobby_id}, '');
@@ -25,7 +25,7 @@ class LobbyDatabase:
         conn.commit()
         cur.close()
 
-    def enter_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
+    async def enter_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
         cur = conn.cursor()
         cur.execute(f"""SELECT users FROM {self.name}
                         WHERE lobby_id={lobby_id};
@@ -36,7 +36,7 @@ class LobbyDatabase:
         conn.commit()
         cur.close()
 
-    def exit_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
+    async def exit_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
         cur = conn.cursor()
         cur.execute(f"""SELECT users FROM {self.name}
                                 WHERE lobby_id={lobby_id};
@@ -47,7 +47,7 @@ class LobbyDatabase:
         conn.commit()
         cur.close()
 
-    def reset_lobby(self, lobby_id: int):
+    async def reset_lobby(self, lobby_id: int):
         cur = conn.cursor()
         cur.execute(f"""UPDATE {self.name} SET users='' WHERE lobby_id={lobby_id};""")
         conn.commit()
@@ -67,7 +67,7 @@ class UsersWithoutLobbiesDatabase:
     def __init__(self, name):
         self.name = name
 
-    def create_table(self):
+    async def create_table(self):
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
             (chat_id INT PRIMARY KEY,
@@ -76,17 +76,13 @@ class UsersWithoutLobbiesDatabase:
         cur.close()
         print('[INFO] TABLE CREATED SUCCESSFULLY')
 
-    def insert_users_message_id(self, chat_id, message_id):
+    async def insert_users_message_id(self, chat_id, message_id):
         cur = conn.cursor()
-        cur.execute(f"""INSERT OR IGNORE INTO {self.name} (chat_id, message_id)
-                VALUES ({chat_id}, {message_id});
+        cur.execute(f"""INSERT INTO {self.name} (chat_id, message_id)
+                VALUES ({chat_id}, {message_id})
+                ON CONFLICT(chat_id)
+                DO UPDATE SET message_id={message_id};
                 """)
-        conn.commit()
-        cur.close()
-
-    def update_users_message_id(self, chat_id, message_id):
-        cur = conn.cursor()
-        cur.execute(f"""UPDATE {self.name} SET message_id='{message_id}' WHERE chat_id={chat_id};""")
         conn.commit()
         cur.close()
 
@@ -98,7 +94,7 @@ class UsersWithoutLobbiesDatabase:
         cur.close()
         return stat
 
-    def delete_chat_id(self, chat_id):
+    async def delete_chat_id(self, chat_id):
         cur = conn.cursor()
         cur.execute(f"""DELETE FROM {self.name} WHERE chat_id={chat_id};""")
         conn.commit()
