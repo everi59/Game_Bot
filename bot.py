@@ -18,9 +18,12 @@ bot = Bot(token=config.tg_bot.token,
 async def main():
     await lobby_database.create_table()
     await users_without_lobbies_database.create_table()
-    for i in range(-1, 5):
-        await lobby_database.reset_lobby(i)
-        await lobby_database.default_lobby(i)
+    lobbies_id = lobby_database.get_all_lobby_stat()
+    users_without_lobby = users_without_lobbies_database.get_statistic_of_users()
+    for i in lobbies_id:
+        await lobby_database.reset_lobby(lobby_id=i[0])
+    for i in users_without_lobby:
+        await users_without_lobbies_database.delete_chat_id(i[0])
     logging.basicConfig(level=logging.INFO,
                         format='%(filename)s:%(lineno)d #%(levelname)-8s '
                                '[%(asctime)s] - %(name)s - %(message)s')

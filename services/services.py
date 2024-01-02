@@ -13,9 +13,18 @@ class FSMLobbyClass(StatesGroup):
     lobby = State()
 
 
+def create_lobby_short_name(users):
+    names = list(map(lambda x: x.split('-')[1], users))
+    lobby_short_name = ', '.join(names)
+    lobby_short_name.strip(', ')
+    return lobby_short_name[:10]+'...' if len(lobby_short_name) < 10 else lobby_short_name
+
+
 def create_lobbies_page():
-    return {LobbyCallbackFactory(lobby_id=i).pack(): f'Лобби №{i} {len(lobby_database.get_lobby_stat(i))}/4'
-            for i in range(1, 5)}
+    all_lobby_stat = lobby_database.get_all_lobby_stat()
+    return {LobbyCallbackFactory(lobby_id=lobby[0]).pack():
+            f"""{create_lobby_short_name(lobby[1].split())} {len(lobby[1].split())}/4"""
+            for lobby in all_lobby_stat if lobby[1]}
 
 
 async def send_messages_to_users(bot: Bot, message: str, users: list):

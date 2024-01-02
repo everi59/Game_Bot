@@ -5,4 +5,4 @@ lexicon_commands: dict[str, str] = {
     '/exit': 'Выйти из лобби'
 }
 
-keyboard_lexicon = {}
+keyboard_lexicon = {'create_new_lobby': 'Новое лобби'}

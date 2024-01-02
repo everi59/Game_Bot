@@ -17,50 +17,64 @@ class LobbyDatabase:
         cur.close()
         print('[INFO] TABLE CREATED SUCCESSFULLY')
 
-    async def default_lobby(self, lobby_id: int):
-        cur = conn.cursor()
-        cur.execute(f"""INSERT OR IGNORE INTO {self.name} (lobby_id, users)
-        VALUES ({lobby_id}, '');
-        """)
-        conn.commit()
-        cur.close()
-
     async def enter_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
         cur = conn.cursor()
         cur.execute(f"""SELECT users FROM {self.name}
-                        WHERE lobby_id={lobby_id};
+                        WHERE rowid={lobby_id};
                         """)
         pairs = cur.fetchone()[0].split()
         pairs.append(f"""{user_chat_id}-{user_name}""")
-        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE lobby_id={lobby_id};""")
+        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE rowid={lobby_id};""")
         conn.commit()
         cur.close()
 
     async def exit_lobby(self, lobby_id: int, user_chat_id: str, user_name: str):
         cur = conn.cursor()
         cur.execute(f"""SELECT users FROM {self.name}
-                                WHERE lobby_id={lobby_id};
+                                WHERE rowid={lobby_id};
                                 """)
         pairs = cur.fetchone()[0].split()
         pairs.remove(f"""{user_chat_id}-{user_name}""")
-        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE lobby_id={lobby_id};""")
+        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE rowid={lobby_id};""")
         conn.commit()
         cur.close()
 
     async def reset_lobby(self, lobby_id: int):
         cur = conn.cursor()
-        cur.execute(f"""UPDATE {self.name} SET users='' WHERE lobby_id={lobby_id};""")
+        cur.execute(f"""UPDATE {self.name} SET users='' WHERE rowid={lobby_id};""")
         conn.commit()
         cur.close()
 
     def get_lobby_stat(self, lobby_id: int):
         cur = conn.cursor()
         cur.execute(f"""SELECT users FROM {self.name}
-                    WHERE lobby_id={lobby_id};""")
+                    WHERE rowid={lobby_id};""")
         s = cur.fetchone()[0].split()
         conn.commit()
         cur.close()
         return s
+
+    def create_new_lobby(self, user_chat_id: str, user_name: str):
+        cur = conn.cursor()
+        cur.execute(f"""INSERT INTO {self.name} VALUES (NULL, '{user_chat_id}-{user_name}')""")
+        cur.execute(f"""SELECT rowid FROM {self.name}
+                        WHERE users='{user_chat_id}-{user_name}';""")
+        lobby_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        return lobby_id
+
+    def get_all_lobby_stat(self):
+        cur = conn.cursor()
+        cur.execute(f"""SELECT rowid, users FROM {self.name}""")
+        all_lobby_stat = cur.fetchall()
+        return all_lobby_stat
+
+    def delete_lobby(self, lobby_id: int):
+        cur = conn.cursor()
+        cur.execute(f"""DELETE FROM {self.name} WHERE rowid={lobby_id};""")
+        conn.commit()
+        cur.close()
 
 
 class UsersWithoutLobbiesDatabase:
