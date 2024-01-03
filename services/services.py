@@ -9,7 +9,9 @@ lobby_database = LobbyDatabase('test6')
 
 class FSMLobbyClass(StatesGroup):
     in_lobby = State()
+    in_game = State()
     select_lobby = State()
+    ready = State()
     lobby = State()
 
 
@@ -17,13 +19,13 @@ def create_lobby_short_name(users):
     names = list(map(lambda x: x.split('-')[1], users))
     lobby_short_name = ', '.join(names)
     lobby_short_name.strip(', ')
-    return lobby_short_name[:10]+'...' if len(lobby_short_name) < 10 else lobby_short_name
+    return lobby_short_name[:10]+'...' if len(lobby_short_name) > 12 else lobby_short_name
 
 
 def create_lobbies_page():
     all_lobby_stat = lobby_database.get_all_lobby_stat()
     return {LobbyCallbackFactory(lobby_id=lobby[0]).pack():
-            f"""{create_lobby_short_name(lobby[1].split())} {len(lobby[1].split())}/4"""
+            f"""{create_lobby_short_name(lobby[1].split('~~~'))} {len(lobby[1].split('~~~'))}/4"""
             for lobby in all_lobby_stat if lobby[1]}
 
 

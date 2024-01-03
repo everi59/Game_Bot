@@ -22,9 +22,9 @@ class LobbyDatabase:
         cur.execute(f"""SELECT users FROM {self.name}
                         WHERE rowid={lobby_id};
                         """)
-        pairs = cur.fetchone()[0].split()
+        pairs = cur.fetchone()[0].split('~~~')
         pairs.append(f"""{user_chat_id}-{user_name}""")
-        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE rowid={lobby_id};""")
+        cur.execute(f"""UPDATE {self.name} SET users='{'~~~'.join(pairs)}' WHERE rowid={lobby_id};""")
         conn.commit()
         cur.close()
 
@@ -33,9 +33,9 @@ class LobbyDatabase:
         cur.execute(f"""SELECT users FROM {self.name}
                                 WHERE rowid={lobby_id};
                                 """)
-        pairs = cur.fetchone()[0].split()
+        pairs = cur.fetchone()[0].split('~~~')
         pairs.remove(f"""{user_chat_id}-{user_name}""")
-        cur.execute(f"""UPDATE {self.name} SET users='{' '.join(pairs)}' WHERE rowid={lobby_id};""")
+        cur.execute(f"""UPDATE {self.name} SET users='{'~~~'.join(pairs)}' WHERE rowid={lobby_id};""")
         conn.commit()
         cur.close()
 
@@ -49,13 +49,14 @@ class LobbyDatabase:
         cur = conn.cursor()
         cur.execute(f"""SELECT users FROM {self.name}
                     WHERE rowid={lobby_id};""")
-        s = cur.fetchone()[0].split()
+        s = cur.fetchone()[0].split('~~~')
         conn.commit()
         cur.close()
         return s
 
     def create_new_lobby(self, user_chat_id: str, user_name: str):
         cur = conn.cursor()
+        print(f'{user_chat_id}-{user_name}')
         cur.execute(f"""INSERT INTO {self.name} VALUES (NULL, '{user_chat_id}-{user_name}')""")
         cur.execute(f"""SELECT rowid FROM {self.name}
                         WHERE users='{user_chat_id}-{user_name}';""")
@@ -70,7 +71,7 @@ class LobbyDatabase:
         all_lobby_stat = cur.fetchall()
         return all_lobby_stat
 
-    def delete_lobby(self, lobby_id: int):
+    async def delete_lobby(self, lobby_id: int):
         cur = conn.cursor()
         cur.execute(f"""DELETE FROM {self.name} WHERE rowid={lobby_id};""")
         conn.commit()

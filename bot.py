@@ -21,7 +21,7 @@ async def main():
     lobbies_id = lobby_database.get_all_lobby_stat()
     users_without_lobby = users_without_lobbies_database.get_statistic_of_users()
     for i in lobbies_id:
-        await lobby_database.reset_lobby(lobby_id=i[0])
+        await lobby_database.delete_lobby(lobby_id=i[0])
     for i in users_without_lobby:
         await users_without_lobbies_database.delete_chat_id(i[0])
     logging.basicConfig(level=logging.INFO,
