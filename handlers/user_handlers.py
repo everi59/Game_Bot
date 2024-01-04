@@ -9,7 +9,9 @@ from keyboards.keyboards import create_inline_kb, LobbyCallbackFactory
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.fsm.storage.base import StorageKey
-from services.services import FSMLobbyClass, create_lobbies_page, send_messages_to_users, get_lobby_members
+from services.services import (FSMLobbyClass, create_lobbies_page, send_messages_to_users,
+                               get_lobby_members, create_deck, get_next_cards)
+from lexicon.lexicon import lexicon_card_colors, lexicon_card_faces
 
 router = Router()
 lobby_database = LobbyDatabase('test6')
@@ -184,7 +186,12 @@ async def ready_command_others(message: Message,
                                                      user_id=message.chat.id))
     print(storage_data)
     if not storage_data['ready']:
+        deck = lobby_database.get_lobby_deck(lobby_id=data['lobby'])
+        cards = get_next_cards(deck=deck, cards_num=6)
         storage_data['ready'] = 1
+        storage_data['current_cards'] = cards[0]
+        deck = '~~~'.join(cards[1])
+        await lobby_database.update_deck(deck=deck, lobby_id=data['lobby'])
         await storage.update_data(StorageKey(bot_id=bot.id,
                                              chat_id=message.chat.id,
                                              user_id=message.chat.id), data=storage_data)
@@ -193,12 +200,14 @@ async def ready_command_others(message: Message,
         lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
         answer_for_other_text = f'{message.from_user.full_name} готов к игре!\n\n'
         other_text = ''
+        user_cards = {}
+        info_text = '\n\nИнформация о лобби - /info\nВыйти - /exit'
+        print(storage_data)
         for pair in lobby_stat:
             print(pair)
             storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
                                                              chat_id=int(pair.split('-')[0]),
                                                              user_id=int(pair.split('-')[0])))
-            print(storage_data)
             if storage_data['ready']:
                 users_unready.append(f'{pair.split("-")[1]} - готов')
             else:
@@ -206,28 +215,41 @@ async def ready_command_others(message: Message,
                 users_unready.append(f'{pair.split("-")[1]} - не готов')
         if users_unready_counter == 0:
             if len(lobby_stat) == 2:
-                other_text += ('Все игроки готовы! Игра начинается!\n\n'
-                               'Информация о лобби - /info\n'
-                               'Выйти - /exit')
+                other_text = 'Все игроки готовы! Игра начинается!\n\nВаши карты:\n'
                 for pair in lobby_stat:
                     await storage.set_state(StorageKey(bot_id=bot.id,
                                                        chat_id=int(pair.split('-')[0]),
                                                        user_id=int(pair.split('-')[0])), state=FSMLobbyClass.in_game)
+                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
+                                                                     chat_id=int(pair.split('-')[0]),
+                                                                     user_id=int(pair.split('-')[0])))
+                    user_cards[int(pair.split('-')[0])] = sorted([x.replace('-', ' ')
+                                                                  for x in storage_data['current_cards']],
+                                                                 key=lambda x: (lexicon_card_colors[x.split()[1]],
+                                                                                lexicon_card_faces.get(x.split()[0],
+                                                                                                       x.split()[0])))
 
             else:
                 other_text += '\n'.join(users_unready)
-                other_text += ('\n\nОжидаем других игроков\n\n'
-                               'Информация о лобби - /info\n'
-                               'Выйти - /exit')
+                other_text += '\n\nОжидаем других игроков'
         else:
             other_text += '\n'.join(users_unready)
-            other_text += ('\n\nОжидаем других игроков\n\n'
-                           'Информация о лобби - /info\n'
-                           'Выйти - /exit')
-        await message.answer(text='Вы приготовились!\n\n'+other_text)
+            other_text += '\n\nОжидаем других игроков'
         for pair in lobby_stat:
             if pair.split('-')[0] != str(message.chat.id):
-                await bot.send_message(chat_id=pair.split('-')[0], text=answer_for_other_text+other_text)
+                if user_cards:
+                    await bot.send_message(chat_id=pair.split('-')[0],
+                                           text=answer_for_other_text + other_text + '\n'.join(user_cards[
+                                               int(pair.split('-')[0])]) + info_text)
+                else:
+                    await bot.send_message(chat_id=pair.split('-')[0],
+                                           text=answer_for_other_text + other_text + info_text)
+            else:
+                if user_cards:
+                    await message.answer(text='Вы приготовились!\n\n'+other_text+'\n'.join(user_cards[
+                        int(pair.split('-')[0])])+info_text)
+                else:
+                    await message.answer(text='Вы приготовились!\n\n'+other_text+info_text)
     else:
         await message.answer(text='Вы уже готовы!')
 
@@ -235,8 +257,9 @@ async def ready_command_others(message: Message,
 @router.callback_query(F.data == 'create_new_lobby', StateFilter(FSMLobbyClass.select_lobby))
 async def create_new_lobby(callback: CallbackQuery,
                            state: FSMContext):
+    deck = create_deck()
     lobby_id = lobby_database.create_new_lobby(user_chat_id=str(callback.message.chat.id),
-                                               user_name=callback.from_user.full_name)
+                                               user_name=callback.from_user.full_name, deck=deck)
     await state.set_state(FSMLobbyClass.in_lobby)
     await state.update_data(lobby=lobby_id, ready=0)
     await callback.message.edit_text(text='Вы создали новое лобби!\n\n'

@@ -11,7 +11,8 @@ class LobbyDatabase:
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
             (lobby_id INT PRIMARY KEY,
-            users TEXT);
+            users TEXT,
+            deck TEXT);
             """)
         conn.commit()
         cur.close()
@@ -54,10 +55,9 @@ class LobbyDatabase:
         cur.close()
         return s
 
-    def create_new_lobby(self, user_chat_id: str, user_name: str):
+    def create_new_lobby(self, user_chat_id: str, user_name: str, deck: str):
         cur = conn.cursor()
-        print(f'{user_chat_id}-{user_name}')
-        cur.execute(f"""INSERT INTO {self.name} VALUES (NULL, '{user_chat_id}-{user_name}')""")
+        cur.execute(f"""INSERT INTO {self.name} VALUES (NULL, '{user_chat_id}-{user_name}', '{deck}')""")
         cur.execute(f"""SELECT rowid FROM {self.name}
                         WHERE users='{user_chat_id}-{user_name}';""")
         lobby_id = cur.fetchone()[0]
@@ -74,6 +74,20 @@ class LobbyDatabase:
     async def delete_lobby(self, lobby_id: int):
         cur = conn.cursor()
         cur.execute(f"""DELETE FROM {self.name} WHERE rowid={lobby_id};""")
+        conn.commit()
+        cur.close()
+
+    def get_lobby_deck(self, lobby_id):
+        cur = conn.cursor()
+        cur.execute(f"""SELECT deck FROM {self.name} WHERE rowid={lobby_id}""")
+        deck = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        return deck
+
+    async def update_deck(self, deck, lobby_id):
+        cur = conn.cursor()
+        cur.execute(f"""UPDATE {self.name} SET deck='{deck}' WHERE rowid={lobby_id};""")
         conn.commit()
         cur.close()
 

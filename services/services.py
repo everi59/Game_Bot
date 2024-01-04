@@ -13,6 +13,7 @@ class FSMLobbyClass(StatesGroup):
     select_lobby = State()
     ready = State()
     lobby = State()
+    current_cards = State()
 
 
 def create_lobby_short_name(users):
@@ -37,3 +38,19 @@ async def send_messages_to_users(bot: Bot, message: str, users: list):
 def get_lobby_members(pairs: list):
     members = list(map(lambda x: x.split('-')[1], pairs))
     return '\n'.join(members)
+
+
+def create_deck():
+    faces = list(range(6, 11))
+    [faces.append(i) for i in ["Король", "Дама", "Валет", "Туз"]]
+    colour = ["♥️", "♦️", "♣️", "♠️"]
+    from itertools import product
+    from random import shuffle
+    deck = ["{}-{}".format(*card) for card in product(faces, colour)]
+    shuffle(deck)
+    return '~~~'.join(deck)
+
+
+def get_next_cards(deck, cards_num):
+    deck = deck.split('~~~')
+    return [deck[:cards_num], deck[cards_num:]]
