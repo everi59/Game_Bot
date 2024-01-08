@@ -21,8 +21,10 @@ class FSMLobbyClass(StatesGroup):
     game_message_id = State()
 
 
-def create_user_list_for_lobby(users: list):
-    users_list_for_lobby = '\n'.join([f'{i}. {users[i-1]}' if i <= len(users) else f'{i}. Ждем игрока' for i in range(1, 5)])
+def create_user_list_for_lobby(users: list, ready_dict: dict):
+    users_list_for_lobby = (
+        '\n'.join([f'{i}. {users[i-1]} - {"Готов" if ready_dict[users[i-1]] else "Не готов"}' if i <= len(users) else
+                   f'{i}. Ждем игрока' for i in range(1, 5)]))
     return users_list_for_lobby
 
 
@@ -74,20 +76,33 @@ class LobbyMessage:
     ready_text = 'Вы не готовы!\n\n'
     lobby_keyboard_buttons = {'ready': 'Приготовиться', 'exit': 'Выйти'}
     keyboard = create_inline_kb(dct=lobby_keyboard_buttons, width=1)
+    ready_dict = {}
 
     def __init__(self, users: list):
         self.users = users
 
     def __str__(self):
-        users_list = create_user_list_for_lobby(self.users)
+        users_list = create_user_list_for_lobby(users=self.users, ready_dict=self.ready_dict)
         lobby_text = self.ready_text + f'Участники лобби:\n{users_list}'
         return lobby_text
 
     def delete_user(self, user: str):
         self.users.remove(user)
+        self.ready_dict.pop(user)
 
     def add_user(self, user: str):
         self.users.append(user)
+
+    def update_ready_info(self, ready: int, user: str):
+        self.ready_dict[user] = ready
+        if ready == 1:
+            self.lobby_keyboard_buttons = {'exit': 'Выйти'}
+            self.keyboard = create_inline_kb(dct=self.lobby_keyboard_buttons, width=1)
+            self.ready_text = 'Вы готовы! \nОжидаем других игроков!\n\n'
+        else:
+            self.lobby_keyboard_buttons = {'ready': 'Приготовиться', 'exit': 'Выйти'}
+            self.keyboard = create_inline_kb(dct=self.lobby_keyboard_buttons, width=1)
+            self.ready_text = 'Вы не готовы!\n\n'
 
 
 async def exit_lobby(state: FSMContext, data, bot, message: Message):
