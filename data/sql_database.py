@@ -10,7 +10,7 @@ class LobbyDatabase:
     async def create_table(self):
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
-            (lobby_id SERIAL PRIMARY KEY,
+            (lobby_id BIGSERIAL PRIMARY KEY,
             users TEXT,
             deck TEXT);
             """)
@@ -93,10 +93,10 @@ class UsersDatabase:
     async def create_table(self):
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
-            (chat_id INT PRIMARY KEY,
+            (chat_id BIGINT PRIMARY KEY,
             user_name TEXT,
-            lobbies_page_message_id INT,
-            game_page_message_id INT,
+            lobbies_page_message_id BIGINT,
+            game_page_message_id BIGINT,
             balance INT,
             games_amount INT,
             wines_amount INT,

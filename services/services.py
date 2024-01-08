@@ -1,5 +1,4 @@
 from typing import Optional
-
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -50,8 +49,8 @@ async def edit_users_messages(bot: Bot, message: str, users: list, markup: Optio
         await bot.edit_message_text(chat_id=int(i), text=message, reply_markup=markup)
 
 
-def get_lobby_members(pairs: list):
-    members = list(map(lambda x:  users_database.get_user_name(x), pairs))
+def get_lobby_members(users_ids: list):
+    members = list(map(lambda user_id:  users_database.get_user_name(user_id), users_ids))
     return '\n'.join(members)
 
 
@@ -106,7 +105,7 @@ async def exit_lobby(state: FSMContext, data, bot, message: Message):
                                                                  user_id=int(chat_id)))
                 lobby_message = storage_data['lobby_message']
                 lobby_message.delete_user(users_database.get_user_name(chat_id=chat_id))
-                await bot.edit_message_text(chat_id=chat_id,
+                await bot.edit_message_text(text=str(lobby_message), chat_id=chat_id,
                                             message_id=users_database.get_user_game_page_message_id(
                                                 chat_id=message.chat.id),
                                             reply_markup=lobby_message.keyboard)

@@ -107,9 +107,9 @@ async def lobby_page(callback: CallbackQuery,
         users_name = users_database.get_user_name(chat_id=callback.message.chat.id)
         lobby_user_ids = deepcopy(lobby_stat)
         lobby_user_ids.append(callback.message.chat.id)
-        lobby_message = LobbyMessage([users_database.get_user_name(chat_id) for chat_id in lobby_user_ids])
-        keyboard = create_inline_kb(dct=lobby_message.lobby_keyboard_buttons, width=1)
-        bot_message = await callback.message.edit_text(text=str(lobby_message), reply_markup=keyboard)
+        lobby_message_1 = LobbyMessage([users_database.get_user_name(chat_id) for chat_id in lobby_user_ids])
+        keyboard = create_inline_kb(dct=lobby_message_1.lobby_keyboard_buttons, width=1)
+        bot_message = await callback.message.edit_text(text=str(lobby_message_1), reply_markup=keyboard)
         await callback.answer(text='Вы зашли в лобби!')
         await users_database.delete_lobbies_page_message_id(chat_id=callback.message.chat.id)
         users_database.update_game_page_message_id(chat_id=callback.message.chat.id, message_id=bot_message.message_id)
@@ -136,50 +136,40 @@ async def lobby_page(callback: CallbackQuery,
                 pass
         await lobby_database.enter_lobby(lobby_id=callback_data.lobby_id, user_chat_id=str(callback.message.chat.id))
         await state.set_state(FSMLobbyClass.in_lobby)
+        await state.update_data(lobby=callback_data.lobby_id, lobby_message=lobby_message_1, ready=0)
     else:
         await callback.answer('Лобби заполнено')
-#
-#
-# @router.message(Command(commands='exit'), StateFilter(FSMLobbyClass.in_lobby))
-# async def exit_command(message: Message,
-#                        state: FSMContext):
-#     data = await state.get_data()
-#     await lobby_database.exit_lobby(lobby_id=data['lobby'], user_chat_id=str(message.chat.id),
-#                                     user_name=message.from_user.full_name)
-#     lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
-#     if not len(lobby_stat[0]):
-#         await lobby_database.delete_lobby(data['lobby'])
-#     else:
-#         await send_messages_to_users(bot=bot,
-#                                      message=f'{message.from_user.full_name} вышел(-а) из лобби\n\n'
-#                                              f'Текущие участники:\n'
-#                                              f'{get_lobby_members(lobby_stat)}\n\n'
-#                                              f'Приготовиться - /ready\n'
-#                                              f'Информация о лобби - /info\n'
-#                                              f'Выйти - /exit',
-#                                      users=lobby_stat)
-#     lobby_pages = create_lobbies_page()
-#     keyboard = create_inline_kb(width=2, dct=lobby_pages, last_btn='create_new_lobby')
-#     bot_message = await message.answer(text='Список доступных лобби', reply_markup=keyboard)
-#     people_without_lobby = users_database.get_statistic_of_users_without_lobby()
-#     await state.update_data(lobby=None)
-#     await state.set_state(FSMLobbyClass.select_lobby)
-#     await users_database.insert_users_message_id(chat_id=message.chat.id,
-#                                                                  message_id=bot_message.message_id)
-#     for chat_id, message_id in people_without_lobby:
-#         try:
-#             await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id,
-#                                                 reply_markup=keyboard)
-#         except TelegramBadRequest:
-#             pass
-#     if data.get('current_cards'):
-#         lobby_deck = lobby_database.get_lobby_deck(lobby_id=data['lobby']).split('~~~')
-#         user_cards = data['current_cards'].split('~~~')
-#         for card in user_cards:
-#             lobby_deck.append(card)
-#         await lobby_database.update_deck(deck='~~~'.join(lobby_deck))
-#
-#
+
+
+@router.callback_query(F.data == 'exit', StateFilter(FSMLobbyClass.in_lobby))
+async def exit_command(callback: CallbackQuery,
+                       state: FSMContext):
+    data = await state.get_data()
+    data_callback = callback.data
+    data = update_previous_pages(data, data_callback)
+    await state.update_data(data=data)
+    await state.set_state(FSMLobbyClass.select_lobby)
+    lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
+    if not len(lobby_stat[0]):
+        await lobby_database.delete_lobby(data['lobby'])
+    else:
+        await exit_lobby(state=state, bot=bot, message=callback.message, data=data)
+    lobby_pages = create_lobbies_page()
+    keyboards = create_inline_kb(width=2, dct=lobby_pages, last_btn='create_new_lobby',
+                                 back_button=data['previous_pages'][-1])
+    await callback.answer(text='Вы вышли из лобби!')
+    bot_message = await callback.message.edit_text(text='Список доступных лобби', reply_markup=keyboards)
+    await users_database.update_lobbies_page_message_id(chat_id=callback.message.chat.id,
+                                                        lobbies_page_message_id=bot_message.message_id)
+    data['previous_pages'].append(callback.data)
+    if data.get('current_cards'):
+        lobby_deck = lobby_database.get_lobby_deck(lobby_id=data['lobby']).split('~~~')
+        user_cards = data['current_cards'].split('~~~')
+        for card in user_cards:
+            lobby_deck.append(card)
+        await lobby_database.update_deck(deck='~~~'.join(lobby_deck))
+
+
 # @router.message(Command(commands='info'), StateFilter(FSMLobbyClass.in_lobby))
 # async def info_command(message: Message,
 #                        state: FSMContext):
