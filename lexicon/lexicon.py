@@ -6,7 +6,7 @@ lexicon_commands: dict[str, str] = {
     '/ready': 'Приготовиться к игре'
 }
 
-keyboard_lexicon = {'create_new_lobby': 'Новое лобби'}
+keyboard_lexicon = {'create_new_lobby': 'Новое лобби', 'bito': 'Бито', 'beru': 'Беру', 'exit': 'Выйти'}
 
 lexicon_card_colors = {'♥️': 1, '♦️': 2, '♣️': 3, '♠️': 4}
 

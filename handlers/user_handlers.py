@@ -1,4 +1,3 @@
-import aiogram.types
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
@@ -193,20 +192,35 @@ async def ready_command_others(callback: CallbackQuery,
         await lobby_database.update_deck(deck=deck, lobby_id=data['lobby'])
         await state.update_data(data=data)
         lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
-        for chat_id in lobby_stat:
-            try:
+        all_users_ready = lobby_message.get_all_users_ready()
+        if all_users_ready:
+            for chat_id in lobby_stat:
                 storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
                                                                  chat_id=int(chat_id),
                                                                  user_id=int(chat_id)))
+                storage_data['lobby_message'] = None
                 lobby_message = storage_data['lobby_message']
                 lobby_message.update_ready_info(ready=1,
                                                 user=users_database.get_user_name(chat_id=callback.message.chat.id))
                 await bot.edit_message_text(text=str(lobby_message), chat_id=chat_id,
                                             message_id=users_database.get_user_game_page_message_id(
-                                                chat_id=chat_id),
+                                            chat_id=chat_id),
                                             reply_markup=lobby_message.keyboard)
-            except TelegramBadRequest:
-                pass
+        else:
+            for chat_id in lobby_stat:
+                try:
+                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
+                                                                     chat_id=int(chat_id),
+                                                                     user_id=int(chat_id)))
+                    lobby_message = storage_data['lobby_message']
+                    lobby_message.update_ready_info(ready=1,
+                                                    user=users_database.get_user_name(chat_id=callback.message.chat.id))
+                    await bot.edit_message_text(text=str(lobby_message), chat_id=chat_id,
+                                                message_id=users_database.get_user_game_page_message_id(
+                                                    chat_id=chat_id),
+                                                reply_markup=lobby_message.keyboard)
+                except TelegramBadRequest:
+                    pass
 
 
 @router.callback_query(F.data == 'create_new_lobby', StateFilter(FSMLobbyClass.select_lobby))

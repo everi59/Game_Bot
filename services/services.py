@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import InlineKeyboardMarkup, Message
 from bot import users_database, lobby_database
-from keyboards.keyboards import LobbyCallbackFactory, create_inline_kb
+from keyboards.keyboards import LobbyCallbackFactory, create_inline_kb, CardsCallbackFactory
 
 
 class FSMLobbyClass(StatesGroup):
@@ -32,6 +32,11 @@ def create_lobby_short_name(users):
     names = list(map(lambda x: users_database.get_user_name(x), users))
     lobby_short_name = ', '.join(names)
     return lobby_short_name[:10]+'...' if len(lobby_short_name) > 12 else lobby_short_name
+
+
+def create_game_keyboard_dict(cards: list):
+    return {CardsCallbackFactory(face=card.split('-')[0], color=card.split('-')[1]):
+            f'{" ".join(card.split("-"))}' for card in cards}
 
 
 def create_lobbies_page():
@@ -103,6 +108,58 @@ class LobbyMessage:
             self.lobby_keyboard_buttons = {'ready': 'Приготовиться', 'exit': 'Выйти'}
             self.keyboard = create_inline_kb(dct=self.lobby_keyboard_buttons, width=1)
             self.ready_text = 'Вы не готовы!\n\n'
+
+    def get_all_users_ready(self):
+        values = self.ready_dict.values()
+        return all(values) and len(values) == 4
+
+
+class GameMessage:
+    def __init__(self, users: list, deck: list, royal_card: str):
+        self.users = users
+        self.deck = deck
+        self.royal_card = royal_card
+
+    cards_on_table = []
+    user_from_index = 0
+    user_to_index = 1
+    user_from = 0
+    user_to = 0
+    users_cards = {}
+    users_wined = []
+    user_from_bito = 0
+
+    def next_user(self):
+        self.user_from = self.users[self.user_from_index]
+        self.user_to = self.users[self.user_to_index]
+        self.user_from_index = (self.user_from_index + 1) % 4
+        self.user_to_index = (self.user_to_index + 1) % 4
+
+    def update_user_cards(self, user_chat_id: int, user_cards: list):
+        self.users_cards[user_chat_id] = user_cards
+
+    def delete_user_card(self, card: str, user_chat_id: int):
+        cards = self.users_cards[user_chat_id]
+        cards.remove(card)
+        self.users_cards[user_chat_id] = cards
+
+    def create_game_keyboard(self, chat_id: int):
+        if self.user_from == chat_id:
+            dct = create_game_keyboard_dict(self.users_cards[chat_id])
+            if self.cards_on_table:
+                return create_inline_kb(width=1, dct=dct, last_btn='bito', back_button='exit')
+            else:
+                return create_inline_kb(width=1, dct=dct, back_button='exit')
+        if self.user_to == chat_id:
+            dct = create_game_keyboard_dict(self.users_cards[chat_id])
+            if self.cards_on_table:
+                return create_inline_kb(width=1, dct=dct, last_btn='beru', back_button='exit')
+            else:
+                return create_inline_kb(width=1, dct={'exit': 'Выйти'}, back_button='exit')
+        if self.user_from_bito:
+            dct = create_game_keyboard_dict(self.users_cards[chat_id])
+            return create_inline_kb(width=1, dct=dct, last_btn='bito', back_button='exit')
+        return create_inline_kb(width=1, back_button='exit')
 
 
 async def exit_lobby(state: FSMContext, data, bot, message: Message):
