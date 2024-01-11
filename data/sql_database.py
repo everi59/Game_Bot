@@ -11,8 +11,7 @@ class LobbyDatabase:
         cur = conn.cursor()
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {self.name}
             (lobby_id BIGSERIAL PRIMARY KEY,
-            users TEXT,
-            deck TEXT);
+            users TEXT);
             """)
         conn.commit()
         cur.close()
@@ -23,9 +22,9 @@ class LobbyDatabase:
         cur.execute(f"""SELECT users FROM {self.name}
                         WHERE lobby_id={lobby_id};
                         """)
-        pairs = cur.fetchone()[0].split('~~~')
-        pairs.append(f"""{user_chat_id}""")
-        cur.execute(f"""UPDATE {self.name} SET users='{'~~~'.join(pairs)}' WHERE lobby_id={lobby_id};""")
+        users = cur.fetchone()[0].split('~~~')
+        users.append(f"""{user_chat_id}""")
+        cur.execute(f"""UPDATE {self.name} SET users='{'~~~'.join(users)}' WHERE lobby_id={lobby_id};""")
         conn.commit()
         cur.close()
 
@@ -34,9 +33,9 @@ class LobbyDatabase:
         cur.execute(f"""SELECT users FROM {self.name}
                                 WHERE lobby_id={lobby_id};
                                 """)
-        pairs = cur.fetchone()[0].split('~~~')
-        pairs.remove(f"""{user_chat_id}""")
-        cur.execute(f"""UPDATE {self.name} SET users='{'~~~'.join(pairs)}' WHERE lobby_id={lobby_id};""")
+        users = cur.fetchone()[0].split('~~~')
+        users.remove(f"""{user_chat_id}""")
+        cur.execute(f"""UPDATE {self.name} SET users='{'~~~'.join(users)}' WHERE lobby_id={lobby_id};""")
         conn.commit()
         cur.close()
 
@@ -49,9 +48,9 @@ class LobbyDatabase:
         cur.close()
         return s
 
-    def create_new_lobby(self, user_chat_id: str, deck: str):
+    def create_new_lobby(self, user_chat_id: str):
         cur = conn.cursor()
-        cur.execute(f"""INSERT INTO {self.name} (users, deck) VALUES ('{user_chat_id}', '{deck}')""")
+        cur.execute(f"""INSERT INTO {self.name} (users) VALUES ('{user_chat_id}')""")
         cur.execute(f"""SELECT lobby_id FROM {self.name}
                         WHERE users='{user_chat_id}';""")
         lobby_id = cur.fetchone()[0]
@@ -68,20 +67,6 @@ class LobbyDatabase:
     async def delete_lobby(self, lobby_id: int):
         cur = conn.cursor()
         cur.execute(f"""DELETE FROM {self.name} WHERE lobby_id={lobby_id};""")
-        conn.commit()
-        cur.close()
-
-    def get_lobby_deck(self, lobby_id):
-        cur = conn.cursor()
-        cur.execute(f"""SELECT deck FROM {self.name} WHERE lobby_id={lobby_id}""")
-        deck = cur.fetchone()[0]
-        conn.commit()
-        cur.close()
-        return deck
-
-    async def update_deck(self, deck, lobby_id):
-        cur = conn.cursor()
-        cur.execute(f"""UPDATE {self.name} SET deck='{deck}' WHERE lobby_id={lobby_id};""")
         conn.commit()
         cur.close()
 
@@ -170,7 +155,7 @@ class UsersDatabase:
         conn.commit()
         cur.close()
 
-    def update_game_page_message_id(self, chat_id, message_id):
+    async def update_game_page_message_id(self, chat_id, message_id):
         cur = conn.cursor()
         cur.execute(f"""UPDATE {self.name} SET game_page_message_id={message_id} WHERE chat_id={chat_id};""")
         conn.commit()
