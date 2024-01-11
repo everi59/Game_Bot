@@ -4,6 +4,7 @@ from typing import Any
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from lexicon.lexicon import keyboard_lexicon
 
 
 def keyboard_builder(buttons: list,
@@ -57,7 +58,7 @@ def create_inline_kb(width: int,
         ))
     if back_button:
         kb_builder.row(InlineKeyboardButton(
-            text='Назад',
+            text=keyboard_lexicon[back_button] if back_button in keyboard_lexicon else 'Назад',
             callback_data=back_button
         ))
     return kb_builder.as_markup()
@@ -69,3 +70,12 @@ class LobbyCallbackFactory(CallbackData, prefix='lobby', sep='|'):
 
     def __init__(self, lobby_id):
         super().__init__(lobby_id=lobby_id)
+
+
+@dataclass
+class CardsCallbackFactory(CallbackData, prefix='card', sep='|'):
+    face: str
+    color: str
+
+    def __init__(self, face, color):
+        super().__init__(face=face, color=color)
