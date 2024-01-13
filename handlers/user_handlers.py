@@ -109,28 +109,22 @@ async def lobby_page(callback: CallbackQuery,
         lobby_pages = create_lobbies_page()
         lobby_message = lobbies_messages_dict.get(callback_data.lobby_id)
         lobby_message.update_ready_info(ready=0, user=user_name)
-        storage = state.storage
         if lobby_message:
             lobby_message.add_user(user_name)
             for chat_id in lobby_stat:
                 try:
-                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
-                                                                     chat_id=int(chat_id),
-                                                                     user_id=int(chat_id)))
-                    await bot.edit_message_text(text=lobby_message.return_message(storage_data['user_name']),
+                    user_name = lobby_message.return_message(users_database.get_user_name(chat_id))
+                    await bot.edit_message_text(text=user_name,
                                                 chat_id=chat_id,
                                                 message_id=users_database.get_user_game_page_message_id(
                                                     chat_id=chat_id),
-                                                reply_markup=lobby_message.create_keyboard(storage_data['user_name']))
+                                                reply_markup=lobby_message.create_keyboard(user_name))
                 except TelegramBadRequest:
                     pass
             for chat_id, message_id in people_without_lobby:
                 try:
-                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
-                                                                     chat_id=int(chat_id),
-                                                                     user_id=int(chat_id)))
                     keyboard = create_inline_kb(width=2, dct=lobby_pages, last_btn='create_new_lobby',
-                                                back_button=storage_data['previous_pages'][-1])
+                                                back_button='menu')
                     await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id,
                                                         reply_markup=keyboard)
                 except TelegramBadRequest:
@@ -215,14 +209,12 @@ async def ready_command_others(callback: CallbackQuery,
         else:
             for chat_id in lobby_stat:
                 try:
-                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
-                                                                     chat_id=int(chat_id),
-                                                                     user_id=int(chat_id)))
-                    await bot.edit_message_text(text=lobby_message.return_message(storage_data['user_name']),
+                    user_name = lobby_message.return_message(users_database.get_user_name(chat_id))
+                    await bot.edit_message_text(text=lobby_message.return_message(user_name),
                                                 chat_id=chat_id,
                                                 message_id=users_database.get_user_game_page_message_id(
                                                     chat_id=chat_id),
-                                                reply_markup=lobby_message.create_keyboard(storage_data['user_name']))
+                                                reply_markup=lobby_message.create_keyboard(user_name))
                 except TelegramBadRequest as e:
                     print(e)
     else:
@@ -233,7 +225,7 @@ async def ready_command_others(callback: CallbackQuery,
 async def create_new_lobby(callback: CallbackQuery,
                            state: FSMContext):
     data = await state.get_data()
-    user_name = data['user_name']
+    user_name = users_database.get_user_name(chat_id=callback.message.chat.id)
     lobby_id = lobby_database.create_new_lobby(user_chat_id=str(callback.message.chat.id))
     data['lobby'] = lobby_id
     data['ready'] = 0

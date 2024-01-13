@@ -1,7 +1,6 @@
 from typing import Optional
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.base import StorageKey
@@ -229,14 +228,12 @@ async def exit_lobby(state: FSMContext, data, bot, message: Message):
 
             for chat_id in lobby_stat:
                 try:
-                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
-                                                                     chat_id=int(chat_id),
-                                                                     user_id=int(chat_id)))
-                    await bot.edit_message_text(text=lobby_message.return_message(storage_data['user_name']),
+                    user_name = lobby_message.return_message(users_database.get_user_name(chat_id))
+                    await bot.edit_message_text(text=lobby_message.return_message(user_name),
                                                 chat_id=chat_id,
                                                 message_id=users_database.get_user_game_page_message_id(
                                                     chat_id=chat_id),
-                                                reply_markup=lobby_message.create_keyboard(storage_data['user_name']))
+                                                reply_markup=lobby_message.create_keyboard(user_name))
                 except TelegramBadRequest:
                     pass
         if st == FSMLobbyClass.in_game:
@@ -249,23 +246,22 @@ async def exit_lobby(state: FSMContext, data, bot, message: Message):
                         await bot.edit_message_text(text=str(game_message), chat_id=chat_id,
                                                     message_id=users_database.get_user_game_page_message_id(
                                                         chat_id=message.chat.id),
-                                                    reply_markup=game_message.create_game_keyboard(chat_id=
-                                                                                                   int(chat_id)))
+                                                    reply_markup=game_message.create_game_keyboard(
+                                                        chat_id=int(chat_id))
+                                                    )
                     except TelegramBadRequest:
                         pass
             else:
                 games_messages_dict[data['lobby']] = None
                 for chat_id in lobby_stat:
                     try:
-                        storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
-                                                                         chat_id=int(chat_id),
-                                                                         user_id=int(chat_id)))
-                        lobby_message.update_ready_info(ready=0, user=storage_data['user_name'])
+                        user_name = lobby_message.return_message(users_database.get_user_name(chat_id))
+                        lobby_message.update_ready_info(ready=0, user=user_name)
                         await bot.edit_message_text(text=f'Игрок {data["user_name"]} покинул игру', chat_id=chat_id,
                                                     message_id=users_database.get_user_game_page_message_id(
                                                         chat_id=message.chat.id),
                                                     reply_markup=None)
-                        await bot.send_message(text=lobby_message.return_message(data['user_name']),
+                        await bot.send_message(text=lobby_message.return_message(user_name),
                                                chat_id=chat_id,
                                                reply_markup=lobby_message.create_keyboard(data['user_name']))
                     except TelegramBadRequest:
@@ -275,11 +271,8 @@ async def exit_lobby(state: FSMContext, data, bot, message: Message):
     await state.update_data(lobby=None)
     for chat_id, message_id in people_without_lobby:
         try:
-            storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
-                                                             chat_id=int(chat_id),
-                                                             user_id=int(chat_id)))
             keyboard = create_inline_kb(width=2, dct=lobby_pages, last_btn='create_new_lobby',
-                                        back_button=storage_data['previous_pages'][-1])
+                                        back_button='menu')
             await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id,
                                                 reply_markup=keyboard)
         except TelegramBadRequest:
