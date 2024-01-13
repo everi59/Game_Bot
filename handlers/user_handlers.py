@@ -25,10 +25,10 @@ async def start(message: Message,
         await exit_lobby(state=state, data=data, bot=bot, message=message)
     await state.set_state(default_state)
     keyboard = create_inline_kb(dct={'menu': 'Главное меню'}, width=1)
-    game_message_id = await message.answer(text='Это тренировочный бот для игры в <b>Дурака</b> с другими людьми.\n'
-                                                'Для начала перейдите в главное меню',
-                                           reply_markup=keyboard)
-    await state.update_data(previous_pages=[], game_message_id=game_message_id.message_id,
+    await message.answer(text='Это тренировочный бот для игры в <b>Дурака</b> с другими людьми.\n'
+                              'Для начала перейдите в главное меню',
+                         reply_markup=keyboard)
+    await state.update_data(previous_pages=[],
                             user_name=users_database.get_user_name(chat_id=message.chat.id))
 
 
@@ -109,20 +109,21 @@ async def lobby_page(callback: CallbackQuery,
         lobby_pages = create_lobbies_page()
         lobby_message = lobbies_messages_dict.get(callback_data.lobby_id)
         lobby_message.update_ready_info(ready=0, user=user_name)
-        game_message = games_messages_dict[callback_data.lobby_id]
-        game_message.update_user_name(chat_id=callback.message.chat.id, user_name=user_name)
-        game_message.add_user(callback.message.chat.id)
+        storage = state.storage
         if lobby_message:
             lobby_message.add_user(user_name)
             for chat_id in lobby_stat:
                 try:
-                    await bot.edit_message_text(text=lobby_message.return_message(user_name), chat_id=chat_id,
+                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
+                                                                     chat_id=int(chat_id),
+                                                                     user_id=int(chat_id)))
+                    await bot.edit_message_text(text=lobby_message.return_message(storage_data['user_name']),
+                                                chat_id=chat_id,
                                                 message_id=users_database.get_user_game_page_message_id(
                                                     chat_id=chat_id),
-                                                reply_markup=lobby_message.create_keyboard(user_name))
+                                                reply_markup=lobby_message.create_keyboard(storage_data['user_name']))
                 except TelegramBadRequest:
                     pass
-            storage = state.storage
             for chat_id, message_id in people_without_lobby:
                 try:
                     storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
@@ -155,7 +156,6 @@ async def exit_command(callback: CallbackQuery,
     data = await state.get_data()
     data_callback = callback.data
     data = update_previous_pages(data, data_callback)
-    await state.set_state(FSMLobbyClass.select_lobby)
     await exit_lobby(state=state, bot=bot, message=callback.message, data=data)
     lobby_pages = create_lobbies_page()
     keyboards = create_inline_kb(width=2, dct=lobby_pages, last_btn='create_new_lobby',
@@ -164,6 +164,7 @@ async def exit_command(callback: CallbackQuery,
     bot_message = await callback.message.edit_text(text='Список доступных лобби', reply_markup=keyboards)
     await users_database.update_lobbies_page_message_id(chat_id=callback.message.chat.id,
                                                         lobbies_page_message_id=bot_message.message_id)
+    await state.set_state(FSMLobbyClass.select_lobby)
     data['previous_pages'].append(callback.data)
     if data.get('current_cards'):
         lobby_deck = lobby_database.get_lobby_deck(lobby_id=data['lobby']).split('~~~')
@@ -181,9 +182,17 @@ async def ready_command_others(callback: CallbackQuery,
         await state.update_data(ready=1)
         user_name = data['user_name']
         lobby_message = lobbies_messages_dict[data['lobby']]
-        game_message = games_messages_dict[data['lobby']]
-        game_message.give_next_cards_to_user(user_chat_id=callback.message.chat.id, value=6)
+        if games_messages_dict.get(data['lobby']):
+            game_message = games_messages_dict[data['lobby']]
+            game_message.add_user(callback.message.chat.id)
+        else:
+            deck = create_deck()
+            game_message = GameMessage(users=[callback.message.chat.id],
+                                       deck=deck,
+                                       royal_card=' '.join(deck[-1].split('-')))
+            games_messages_dict[data['lobby']] = game_message
         game_message.update_user_name(chat_id=callback.message.chat.id, user_name=user_name)
+        game_message.give_next_cards_to_user(user_chat_id=callback.message.chat.id, value=6)
         lobby_message.update_ready_info(ready=1, user=user_name)
         storage = state.storage
         lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
@@ -191,6 +200,10 @@ async def ready_command_others(callback: CallbackQuery,
         if all_users_ready:
             game_message.next_user()
             for chat_id in lobby_stat:
+                await storage.set_state(StorageKey(bot_id=bot.id,
+                                                   chat_id=int(chat_id),
+                                                   user_id=int(chat_id)),
+                                        state=FSMLobbyClass.in_game)
                 await bot.edit_message_text(text='Игра началась!',
                                             chat_id=chat_id,
                                             message_id=users_database.get_user_game_page_message_id(
@@ -198,7 +211,7 @@ async def ready_command_others(callback: CallbackQuery,
                                             reply_markup=None)
                 await bot.send_message(text=str(game_message),
                                        chat_id=chat_id,
-                                       reply_markup=game_message.create_game_keyboard(chat_id=chat_id))
+                                       reply_markup=game_message.create_game_keyboard(chat_id=int(chat_id)))
         else:
             for chat_id in lobby_stat:
                 try:
@@ -219,17 +232,15 @@ async def ready_command_others(callback: CallbackQuery,
 @router.callback_query(F.data == 'create_new_lobby', StateFilter(FSMLobbyClass.select_lobby))
 async def create_new_lobby(callback: CallbackQuery,
                            state: FSMContext):
-    deck = create_deck()
     data = await state.get_data()
     user_name = data['user_name']
     lobby_id = lobby_database.create_new_lobby(user_chat_id=str(callback.message.chat.id))
+    data['lobby'] = lobby_id
+    data['ready'] = 0
     lobby_message = LobbyMessage([callback.message.chat.full_name])
-    game_message = GameMessage(users=[callback.message.chat.id],
-                               deck=deck,
-                               royal_card=deck[-1])
     lobby_message.update_ready_info(ready=0, user=user_name)
     await state.set_state(FSMLobbyClass.in_lobby)
-    await state.update_data(lobby=lobby_id, ready=0)
+    await state.update_data(data=data)
     await users_database.delete_lobbies_page_message_id(chat_id=callback.message.chat.id)
     people_without_lobby = users_database.get_statistic_of_users_without_lobby()
     lobby_pages = create_lobbies_page()
@@ -246,5 +257,3 @@ async def create_new_lobby(callback: CallbackQuery,
     await users_database.update_game_page_message_id(chat_id=callback.message.chat.id,
                                                      message_id=bot_message.message_id)
     lobbies_messages_dict[lobby_id] = lobby_message
-    games_messages_dict[lobby_id] = game_message
-    game_message.update_user_name(chat_id=callback.message.chat.id, user_name=user_name)

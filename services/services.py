@@ -1,12 +1,14 @@
 from typing import Optional
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import InlineKeyboardMarkup, Message
 from bot import users_database, lobby_database
 from keyboards.keyboards import LobbyCallbackFactory, create_inline_kb, CardsCallbackFactory
+from dataclasses import dataclass
 
 
 lobbies_messages_dict = {}
@@ -38,7 +40,7 @@ def create_lobby_short_name(users):
 
 
 def create_game_keyboard_dict(cards: list):
-    return {CardsCallbackFactory(face=card.split('-')[0], color=card.split('-')[1]):
+    return {CardsCallbackFactory(face=card.split('-')[0], color=card.split('-')[1]).pack():
             f'{" ".join(card.split("-"))}' for card in cards}
 
 
@@ -75,13 +77,13 @@ def create_deck():
     return deck
 
 
+@dataclass
 class LobbyMessage:
-    ready_text = 'Вы готовы!\n\n'
-    unready_text = 'Вы не готовы!\n\n'
-    ready_dict = {}
-
     def __init__(self, users: list):
         self.users = users
+        self.ready_text = 'Вы готовы!\n\n'
+        self.unready_text = 'Вы не готовы!\n\n'
+        self.ready_dict = {}
 
     def return_message(self, user: str):
         users_list = create_user_list_for_lobby(users=self.users, ready_dict=self.ready_dict)
@@ -110,11 +112,21 @@ class LobbyMessage:
             return create_inline_kb(dct={'ready': 'Приготовиться', 'exit': 'Выйти'}, width=1)
 
 
+@dataclass
 class GameMessage:
     def __init__(self, users: list, deck: list, royal_card: str):
         self.users = users
         self.deck = deck
         self.royal_card = royal_card
+        self.cards_on_table = {}
+        self.user_from_index = 0
+        self.user_to_index = 1
+        self.user_from = 0
+        self.user_to = 0
+        self.users_cards = {}
+        self.users_wined = []
+        self.user_from_bito = False
+        self.users_names = {}
 
     game_text = ('Ходит игрок: {}\n'
                  'Кроется игрок: {}\n\n'
@@ -130,21 +142,12 @@ class GameMessage:
         royal_card = self.royal_card
         return self.game_text.format(user_from, user_to, cards_value, royal_card)
 
-    cards_on_table = {}
-    user_from_index = 0
-    user_to_index = 1
-    user_from = 0
-    user_to = 0
-    users_cards = {}
-    users_wined = []
-    user_from_bito = False
-    users_names = {}
-
     def next_user(self):
         self.user_from = self.users[self.user_from_index]
         self.user_to = self.users[self.user_to_index]
         self.user_from_index = (self.user_from_index + 1) % 4
         self.user_to_index = (self.user_to_index + 1) % 4
+        print(self.user_to, self.user_from, self.users)
 
     def delete_user_card(self, card: str, user_chat_id: int):
         cards = self.users_cards[user_chat_id]
@@ -152,21 +155,25 @@ class GameMessage:
         self.users_cards[user_chat_id] = cards
 
     def create_game_keyboard(self, chat_id: int):
-        if self.user_from == chat_id:
-            dct = create_game_keyboard_dict(self.users_cards[chat_id])
+        if str(self.user_from) == str(chat_id):
             if self.cards_on_table:
-                return create_inline_kb(width=1, dct=dct, last_btn='bito', back_button='exit')
+                return create_inline_kb(width=1, dct=create_game_keyboard_dict(self.users_cards[chat_id]),
+                                        last_btn='bito', back_button='exit')
             else:
-                return create_inline_kb(width=1, dct=dct, back_button='exit')
-        if self.user_to == chat_id:
-            dct = create_game_keyboard_dict(self.users_cards[chat_id])
+                return create_inline_kb(width=1,
+                                        dct=create_game_keyboard_dict(self.users_cards[chat_id]),
+                                        back_button='exit')
+        if str(self.user_to) == str(chat_id):
             if self.cards_on_table:
-                return create_inline_kb(width=1, dct=dct, last_btn='beru', back_button='exit')
+                return create_inline_kb(width=1,
+                                        dct=create_game_keyboard_dict(self.users_cards[chat_id]), last_btn='beru',
+                                        back_button='exit')
             else:
-                return create_inline_kb(width=1, dct={'exit': 'Выйти'}, back_button='exit')
+                return create_inline_kb(width=1, back_button='exit')
         if self.user_from_bito:
-            dct = create_game_keyboard_dict(self.users_cards[chat_id])
-            return create_inline_kb(width=1, dct=dct, last_btn='bito', back_button='exit')
+            return create_inline_kb(width=1,
+                                    dct=create_game_keyboard_dict(self.users_cards[chat_id]), last_btn='bito',
+                                    back_button='exit')
         return create_inline_kb(width=1, back_button='exit')
 
     def give_next_cards_to_user(self, user_chat_id: int, value: int):
@@ -184,6 +191,7 @@ class GameMessage:
             else:
                 self.users_cards[user_chat_id] = self.deck[:value]
                 self.deck = self.deck[value:]
+        print(self.users_cards)
 
     def update_user_name(self, chat_id: int, user_name: str):
         self.users_names[chat_id] = user_name
@@ -191,27 +199,80 @@ class GameMessage:
     def add_user(self, user_chat_id: int):
         self.users.append(user_chat_id)
 
+    def delete_user(self, user_chat_id: int, is_add_cards: int):
+        if is_add_cards:
+            deleted_cards = self.users_cards.pop(user_chat_id, [])
+            print(deleted_cards)
+            self.deck = deleted_cards + self.deck
+        self.users.remove(user_chat_id)
+        del self.users_names[user_chat_id]
+
 
 async def exit_lobby(state: FSMContext, data, bot, message: Message):
-    await state.update_data(lobby=None)
     await lobby_database.exit_lobby(lobby_id=data['lobby'], user_chat_id=str(message.chat.id))
     lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
+    storage = state.storage
     if lobby_stat[0] == '':
+        del lobbies_messages_dict[data['lobby']]
+        games_messages_dict[data['lobby']] = None
         await lobby_database.delete_lobby(data['lobby'])
     else:
         lobby_message = lobbies_messages_dict.get(data['lobby'])
         lobby_message.delete_user(data['user_name'])
-        for chat_id in lobby_stat:
-            try:
-                await bot.edit_message_text(text=str(lobby_message), chat_id=chat_id,
-                                            message_id=users_database.get_user_game_page_message_id(
-                                                chat_id=message.chat.id),
-                                            reply_markup=lobby_message.keyboard)
-            except TelegramBadRequest:
-                pass
+        st = await state.get_state()
+        if st == FSMLobbyClass.in_lobby:
+            print(0)
+            if games_messages_dict.get(data['lobby']):
+                game_message = games_messages_dict[data['lobby']]
+                if message.chat.id in game_message.users:
+                    game_message.delete_user(message.chat.id, 1)
+
+            for chat_id in lobby_stat:
+                try:
+                    storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
+                                                                     chat_id=int(chat_id),
+                                                                     user_id=int(chat_id)))
+                    await bot.edit_message_text(text=lobby_message.return_message(storage_data['user_name']),
+                                                chat_id=chat_id,
+                                                message_id=users_database.get_user_game_page_message_id(
+                                                    chat_id=chat_id),
+                                                reply_markup=lobby_message.create_keyboard(storage_data['user_name']))
+                except TelegramBadRequest:
+                    pass
+        if st == FSMLobbyClass.in_game:
+            print(1)
+            game_message = games_messages_dict.get(data['lobby'])
+            if message.chat.id in game_message.users_wined:
+                game_message.delete_user(message.chat.id, 0)
+                for chat_id in lobby_stat:
+                    try:
+                        await bot.edit_message_text(text=str(game_message), chat_id=chat_id,
+                                                    message_id=users_database.get_user_game_page_message_id(
+                                                        chat_id=message.chat.id),
+                                                    reply_markup=game_message.create_game_keyboard(chat_id=
+                                                                                                   int(chat_id)))
+                    except TelegramBadRequest:
+                        pass
+            else:
+                games_messages_dict[data['lobby']] = None
+                for chat_id in lobby_stat:
+                    try:
+                        storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
+                                                                         chat_id=int(chat_id),
+                                                                         user_id=int(chat_id)))
+                        lobby_message.update_ready_info(ready=0, user=storage_data['user_name'])
+                        await bot.edit_message_text(text=f'Игрок {data["user_name"]} покинул игру', chat_id=chat_id,
+                                                    message_id=users_database.get_user_game_page_message_id(
+                                                        chat_id=message.chat.id),
+                                                    reply_markup=None)
+                        await bot.send_message(text=lobby_message.return_message(data['user_name']),
+                                               chat_id=chat_id,
+                                               reply_markup=lobby_message.create_keyboard(data['user_name']))
+                    except TelegramBadRequest:
+                        pass
     lobby_pages = create_lobbies_page()
-    storage = state.storage
     people_without_lobby = users_database.get_statistic_of_users_without_lobby()
+    await state.update_data(lobby=None)
     for chat_id, message_id in people_without_lobby:
         try:
             storage_data = await storage.get_data(StorageKey(bot_id=bot.id,
