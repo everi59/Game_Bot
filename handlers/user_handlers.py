@@ -4,11 +4,11 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import Message, CallbackQuery
 from bot import bot, users_database, lobby_database
-from keyboards.keyboards import create_inline_kb, LobbyCallbackFactory
+from keyboards.keyboards import create_inline_kb, LobbyCallbackFactory, CardsCallbackFactory
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from services.services import exit_lobby, FSMLobbyClass, create_lobbies_page, create_deck, LobbyMessage, \
-    update_previous_pages, GameMessage, lobbies_messages_dict, games_messages_dict
+    update_previous_pages, GameMessage, lobbies_messages_dict, games_messages_dict, get_valid_cards, get_valid_faces
 from datetime import datetime
 from lexicon.lexicon import lexicon_menu_keyboard, lexicon_user_statistic
 
@@ -70,7 +70,7 @@ async def free_reward(callback: CallbackQuery):
             users_database.update_last_free_reward_date_timestamp(chat_id=callback.message.chat.id,
                                                                   last_free_reward_date_timestamp=current_date)
         else:
-            normal_date = datetime.fromtimestamp(last_date+3600)
+            normal_date = datetime.fromtimestamp(last_date + 3600)
             await callback.answer(text=f'Следующую награду можно получить в {normal_date.strftime("%X")}',
                                   show_alert=True)
     else:
@@ -183,7 +183,7 @@ async def ready_command_others(callback: CallbackQuery,
             deck = create_deck()
             game_message = GameMessage(users=[callback.message.chat.id],
                                        deck=deck,
-                                       royal_card=' '.join(deck[-1].split('-')))
+                                       royal_card=deck[-1])
             games_messages_dict[data['lobby']] = game_message
         game_message.update_user_name(chat_id=callback.message.chat.id, user_name=user_name)
         game_message.give_next_cards_to_user(user_chat_id=callback.message.chat.id, value=6)
@@ -203,13 +203,14 @@ async def ready_command_others(callback: CallbackQuery,
                                             message_id=users_database.get_user_game_page_message_id(
                                                 chat_id=chat_id),
                                             reply_markup=None)
-                await bot.send_message(text=str(game_message),
-                                       chat_id=chat_id,
-                                       reply_markup=game_message.create_game_keyboard(chat_id=int(chat_id)))
+                bot_message = await bot.send_message(text=str(game_message),
+                                                     chat_id=chat_id,
+                                                     reply_markup=game_message.create_game_keyboard(chat_id=int(chat_id)))
+                await users_database.update_game_page_message_id(chat_id=chat_id, message_id=bot_message.message_id)
         else:
             for chat_id in lobby_stat:
                 try:
-                    user_name = lobby_message.return_message(users_database.get_user_name(chat_id))
+                    user_name = users_database.get_user_name(chat_id=int(chat_id))
                     await bot.edit_message_text(text=lobby_message.return_message(user_name),
                                                 chat_id=chat_id,
                                                 message_id=users_database.get_user_game_page_message_id(
@@ -249,3 +250,57 @@ async def create_new_lobby(callback: CallbackQuery,
     await users_database.update_game_page_message_id(chat_id=callback.message.chat.id,
                                                      message_id=bot_message.message_id)
     lobbies_messages_dict[lobby_id] = lobby_message
+
+
+# GAME HANDLERS
+@router.callback_query(CardsCallbackFactory.filter(), StateFilter(FSMLobbyClass.in_game))
+async def game_process(callback: CallbackQuery,
+                       callback_data: CardsCallbackFactory,
+                       state: FSMContext):
+    data = await state.get_data()
+    game_message = games_messages_dict[data['lobby']]
+    if callback_data.to_or_from == 'to':
+        if len(game_message.cards_on_table.values()):
+            if not all([1 if i != '' else 0 for i in game_message.cards_on_table.keys()]):
+                valid_cards = get_valid_cards(cards=[i[0] for i in game_message.cards_on_table.items() if i[1] == ''],
+                                              card=[callback_data.face, callback_data.color],
+                                              royal_card=game_message.royal_card)
+                if len(valid_cards) == 1:
+                    lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
+                    game_message.cards_on_table[valid_cards[0]] = '-'.join([callback_data.face, callback_data.color])
+                    game_message.delete_user_card(card='-'.join([callback_data.face, callback_data.color]),
+                                                  user_chat_id=callback.message.chat.id)
+                    for chat_id in lobby_stat:
+                        await bot.edit_message_text(text=str(game_message),
+                                                    chat_id=chat_id,
+                                                    message_id=users_database.get_user_game_page_message_id(
+                                                        chat_id=chat_id),
+                                                    reply_markup=game_message.create_game_keyboard(chat_id=int(chat_id)))
+                elif len(valid_cards) >= 2:
+                    await callback.answer(text='Падажи 2 карты если можешь покрыть пока не работает')
+                else:
+                    await callback.answer(text='Вы не можете покрыться этой картой')
+            else:
+                await callback.answer(text='Все карты покрыты')
+        else:
+            await callback.answer(text='Нет карт для покрытия')
+    else:
+        cards = list(game_message.cards_on_table.values())
+        cards.extend(game_message.cards_on_table.keys())
+        valid_faces = get_valid_faces(cards=cards)
+        if len(game_message.cards_on_table.items()) < len(game_message.users_cards[game_message.user_to]):
+            if callback_data.face in valid_faces or not len(game_message.cards_on_table.values()):
+                game_message.delete_user_card(card='-'.join([callback_data.face, callback_data.color]),
+                                              user_chat_id=callback.message.chat.id)
+                lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
+                game_message.cards_on_table['-'.join([callback_data.face, callback_data.color])] = ''
+                for chat_id in lobby_stat:
+                    await bot.edit_message_text(text=str(game_message),
+                                                chat_id=chat_id,
+                                                message_id=users_database.get_user_game_page_message_id(
+                                                    chat_id=chat_id),
+                                                reply_markup=game_message.create_game_keyboard(chat_id=int(chat_id)))
+            else:
+                await callback.answer(text='Вы не можете подкинуть эту карту')
+        else:
+            await callback.answer(text='На столе достаточно карт!')

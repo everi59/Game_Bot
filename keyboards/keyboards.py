@@ -76,6 +76,7 @@ class LobbyCallbackFactory(CallbackData, prefix='lobby', sep='|'):
 class CardsCallbackFactory(CallbackData, prefix='card', sep='|'):
     face: str
     color: str
+    to_or_from: str
 
-    def __init__(self, face, color):
-        super().__init__(face=face, color=color)
+    def __init__(self, face, color, to_or_from):
+        super().__init__(face=face, color=color, to_or_from=to_or_from)

@@ -3,11 +3,11 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import InlineKeyboardMarkup, Message
 from bot import users_database, lobby_database
 from keyboards.keyboards import LobbyCallbackFactory, create_inline_kb, CardsCallbackFactory
 from dataclasses import dataclass
+from lexicon.lexicon import lexicon_card_faces, lexicon_card_colors
 
 
 lobbies_messages_dict = {}
@@ -38,8 +38,9 @@ def create_lobby_short_name(users):
     return lobby_short_name[:10]+'...' if len(lobby_short_name) > 12 else lobby_short_name
 
 
-def create_game_keyboard_dict(cards: list):
-    return {CardsCallbackFactory(face=card.split('-')[0], color=card.split('-')[1]).pack():
+def create_game_keyboard_dict(cards: list, to_or_from: str):
+    cards.sort(key=lambda x: (lexicon_card_colors[x.split('-')[1]], lexicon_card_faces[x.split('-')[0]]))
+    return {CardsCallbackFactory(face=card.split('-')[0], color=card.split('-')[1], to_or_from=to_or_from).pack():
             f'{" ".join(card.split("-"))}' for card in cards}
 
 
@@ -130,16 +131,18 @@ class GameMessage:
     game_text = ('Ходит игрок: {}\n'
                  'Кроется игрок: {}\n\n'
                  'Карт в колоде: {}\n'
-                 'Козырная карта: {}\n')
-    cards_on_table_text = 'Карты на столе:\n'
-    users_text = 'Игроки:\n'
+                 'Козырная карта: {}\n\n'
+                 'Карты на столе: {}')
 
     def __str__(self):
         user_from = self.users_names[self.user_from]
         user_to = self.users_names[self.user_to]
         cards_value = len(self.deck)
-        royal_card = self.royal_card
-        return self.game_text.format(user_from, user_to, cards_value, royal_card)
+        royal_card = ' '.join(self.royal_card.split('-'))
+        cards_on_table = '\n'.join([f'{" ".join(i[0].split("-"))} покрыта картой {" ".join(i[1].split("-"))}'
+                                    if i[1] != '' else f'{" ".join(i[0].split("-"))} не покрыта'
+                                    for i in self.cards_on_table.items()])
+        return self.game_text.format(user_from, user_to, cards_value, royal_card, cards_on_table)
 
     def next_user(self):
         self.user_from = self.users[self.user_from_index]
@@ -156,22 +159,33 @@ class GameMessage:
     def create_game_keyboard(self, chat_id: int):
         if str(self.user_from) == str(chat_id):
             if self.cards_on_table:
-                return create_inline_kb(width=1, dct=create_game_keyboard_dict(self.users_cards[chat_id]),
-                                        last_btn='bito', back_button='exit')
+                return create_inline_kb(width=1,
+                                        dct=create_game_keyboard_dict(cards=self.users_cards[chat_id],
+                                                                      to_or_from='from'),
+                                        last_btn='bito',
+                                        back_button='exit')
             else:
                 return create_inline_kb(width=1,
-                                        dct=create_game_keyboard_dict(self.users_cards[chat_id]),
+                                        dct=create_game_keyboard_dict(cards=self.users_cards[chat_id],
+                                                                      to_or_from='from'),
                                         back_button='exit')
         if str(self.user_to) == str(chat_id):
-            if self.cards_on_table:
+            if self.cards_on_table and not all(self.cards_on_table.values()):
                 return create_inline_kb(width=1,
-                                        dct=create_game_keyboard_dict(self.users_cards[chat_id]), last_btn='beru',
+                                        dct=create_game_keyboard_dict(cards=self.users_cards[chat_id],
+                                                                      to_or_from='to'),
+                                        last_btn='beru',
                                         back_button='exit')
             else:
-                return create_inline_kb(width=1, back_button='exit')
+                return create_inline_kb(width=1,
+                                        dct=create_game_keyboard_dict(cards=self.users_cards[chat_id],
+                                                                      to_or_from='to'),
+                                        back_button='exit')
         if self.user_from_bito:
             return create_inline_kb(width=1,
-                                    dct=create_game_keyboard_dict(self.users_cards[chat_id]), last_btn='bito',
+                                    dct=create_game_keyboard_dict(cards=self.users_cards[chat_id],
+                                                                  to_or_from='from'),
+                                    last_btn='bito',
                                     back_button='exit')
         return create_inline_kb(width=1, back_button='exit')
 
@@ -210,7 +224,6 @@ class GameMessage:
 async def exit_lobby(state: FSMContext, data, bot, message: Message):
     await lobby_database.exit_lobby(lobby_id=data['lobby'], user_chat_id=str(message.chat.id))
     lobby_stat = lobby_database.get_lobby_stat(data['lobby'])
-    storage = state.storage
     if lobby_stat[0] == '':
         del lobbies_messages_dict[data['lobby']]
         games_messages_dict[data['lobby']] = None
@@ -283,3 +296,28 @@ def update_previous_pages(data, callback_data):
     if callback_data in data['previous_pages']:
         data['previous_pages'] = data['previous_pages'][:-2]
     return data
+
+
+def get_valid_cards(cards: list, card: list, royal_card: str):
+    valid_cards = []
+    royal_card = royal_card.split('-')
+    print(royal_card, card, cards)
+    if card[1] == royal_card[1]:
+        print(1)
+        for i in cards:
+            cur_card = i.split('-')
+            if cur_card[1] == royal_card[1] and lexicon_card_faces[card[0]] > lexicon_card_faces[cur_card[0]]:
+                valid_cards.append(i)
+            elif cur_card[1] != royal_card[1]:
+                valid_cards.append(i)
+    else:
+        for i in cards:
+            cur_card = i.split('-')
+            if cur_card[1] == card[1] and lexicon_card_faces[card[0]] > lexicon_card_faces[cur_card[0]]:
+                valid_cards.append(i)
+    return valid_cards
+
+
+def get_valid_faces(cards: list):
+    cards = [i.split('-') for i in cards]
+    return [i[0] for i in cards]
